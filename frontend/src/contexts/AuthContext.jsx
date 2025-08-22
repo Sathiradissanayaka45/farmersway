@@ -5,7 +5,7 @@ const AuthContext = createContext(null);
 
 // Create axios instance with default config
 const api = axios.create({
-    baseURL: 'http://localhost:5000/api',
+    baseURL: 'http://31.97.236.217:5000/',
     withCredentials: true,
     headers: {
         'Content-Type': 'application/json'
