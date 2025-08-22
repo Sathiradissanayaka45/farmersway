@@ -288,33 +288,6 @@ const UserManagement = () => {
                 return format(new Date(params.value), 'MMM dd, yyyy hh:mm a');
             }
         },
-        {
-            field: 'actions',
-            type: 'actions',
-            headerName: 'Actions',
-            width: 150,
-            getActions: (params) => [
-                <GridActionsCellItem
-                    icon={<EditIcon />}
-                    label="Edit"
-                    onClick={() => handleEditUser(params.row)}
-                    showInMenu
-                />,
-                <GridActionsCellItem
-                    icon={<ResetPasswordIcon />}
-                    label="Reset Password"
-                    onClick={() => handleResetPassword(params.row.id)}
-                    showInMenu
-                />,
-                <GridActionsCellItem
-                    icon={<DeleteIcon color="error" />}
-                    label="Delete"
-                    onClick={() => handleDeleteUser(params.row.id)}
-                    showInMenu
-                    disabled={params.row.role === 'super_admin'} // Prevent deleting super admin
-                />
-            ],
-        }
     ];
 
     return (

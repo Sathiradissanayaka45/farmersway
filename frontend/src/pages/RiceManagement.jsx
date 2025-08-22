@@ -201,26 +201,26 @@ const RiceManagement = () => {
                 />
             )
         },
-        {
-            field: 'actions',
-            type: 'actions',
-            headerName: 'Actions',
-            width: 120,
-            getActions: (params) => [
-                <GridActionsCellItem
-                    icon={<EditIcon />}
-                    label="Edit"
-                    onClick={() => handleEditRice(params.row)}
-                    showInMenu
-                />,
-                <GridActionsCellItem
-                    icon={<DeleteIcon color="error" />}
-                    label="Delete"
-                    onClick={() => handleDeleteRice(params.row.id)}
-                    showInMenu
-                />
-            ],
-        }
+        // {
+        //     field: 'actions',
+        //     type: 'actions',
+        //     headerName: 'Actions',
+        //     width: 120,
+        //     getActions: (params) => [
+        //         <GridActionsCellItem
+        //             icon={<EditIcon />}
+        //             label="Edit"
+        //             onClick={() => handleEditRice(params.row)}
+        //             showInMenu
+        //         />,
+        //         <GridActionsCellItem
+        //             icon={<DeleteIcon color="error" />}
+        //             label="Delete"
+        //             onClick={() => handleDeleteRice(params.row.id)}
+        //             showInMenu
+        //         />
+        //     ],
+        // }
     ];
 
     return (
