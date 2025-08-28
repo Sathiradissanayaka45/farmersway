@@ -5,7 +5,7 @@ const AuthContext = createContext(null);
 
 // Create axios instance with default config
 const api = axios.create({
-    baseURL: 'http://31.97.236.217:5000/api',
+    baseURL: 'https://farmersway.store/api',
     withCredentials: true,
     headers: {
         'Content-Type': 'application/json'
