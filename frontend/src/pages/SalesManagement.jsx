@@ -41,6 +41,9 @@ import {
     Warning as WarningIcon,
     Info as InfoIcon,
 } from '@mui/icons-material';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 
 function TabPanel(props) {
     const { children, value, index, ...other } = props;
@@ -82,13 +85,16 @@ const SalesManagement = () => {
         phone: '',
         address: '',
         riceVarietyId: '',
-        quantityKg: '',
+        packetSize: '5',
+        packetQuantity: '',
         unitPrice: '',
         paidAmount: '',
         paymentMethod: 'cash',
         notes: '',
         totalPrice: '',
-        pendingAmount: ''
+        pendingAmount: '',
+        totalQuantityKg: '',
+        saleDate: new Date() // Add sale date field with current date as default
     });
 
     const handleTabChange = (event, newValue) => {
@@ -165,23 +171,42 @@ const SalesManagement = () => {
             [name]: value
         }));
         
-        if (name === 'quantityKg' || name === 'unitPrice') {
-            const quantity = name === 'quantityKg' ? value : saleForm.quantityKg;
+        // Calculate total quantity and price when packet size, quantity, or unit price changes
+        if (name === 'packetSize' || name === 'packetQuantity' || name === 'unitPrice') {
+            const packetSize = name === 'packetSize' ? value : saleForm.packetSize;
+            const packetQuantity = name === 'packetQuantity' ? value : saleForm.packetQuantity;
             const unitPrice = name === 'unitPrice' ? value : saleForm.unitPrice;
             
-            if (quantity && unitPrice) {
-                const total = parseFloat(quantity) * parseFloat(unitPrice);
-                setSaleForm(prev => ({
-                    ...prev,
-                    totalPrice: total.toFixed(2),
-                    pendingAmount: (total - (parseFloat(prev.paidAmount) || 0)).toFixed(2)
-                }));
+            let totalQuantityKg = '';
+            let totalPrice = '';
+            
+            // Calculate total quantity in kg
+            if (packetSize && packetQuantity) {
+                totalQuantityKg = (parseFloat(packetSize) * parseFloat(packetQuantity)).toFixed(2);
             }
+            
+            // Calculate total price
+            if (totalQuantityKg && unitPrice) {
+                totalPrice = (parseFloat(totalQuantityKg) * parseFloat(unitPrice)).toFixed(2);
+            }
+            
+            // Calculate pending amount
+            let pendingAmount = '';
+            if (totalPrice) {
+                pendingAmount = (parseFloat(totalPrice) - (parseFloat(saleForm.paidAmount) || 0)).toFixed(2);
+            }
+            
+            setSaleForm(prev => ({
+                ...prev,
+                totalQuantityKg,
+                totalPrice,
+                pendingAmount
+            }));
         }
         
-        if (name === 'paidAmount' && saleForm.quantityKg && saleForm.unitPrice) {
-            const total = parseFloat(saleForm.quantityKg) * parseFloat(saleForm.unitPrice);
-            const pending = total - (parseFloat(value) || 0);
+        // Update pending amount when paid amount changes
+        if (name === 'paidAmount' && saleForm.totalPrice) {
+            const pending = parseFloat(saleForm.totalPrice) - (parseFloat(value) || 0);
             setSaleForm(prev => ({
                 ...prev,
                 pendingAmount: pending.toFixed(2)
@@ -194,10 +219,18 @@ const SalesManagement = () => {
         }
     };
 
+    // Add handler for date change
+    const handleDateChange = (date) => {
+        setSaleForm(prev => ({
+            ...prev,
+            saleDate: date
+        }));
+    };
+
     const handleSaleSubmit = async () => {
         try {
             // Validate form
-            if (!saleForm.riceVarietyId || !saleForm.quantityKg || !saleForm.unitPrice) {
+            if (!saleForm.riceVarietyId || !saleForm.packetQuantity || !saleForm.unitPrice) {
                 enqueueSnackbar('Please fill all required fields', { variant: 'error' });
                 return;
             }
@@ -212,10 +245,10 @@ const SalesManagement = () => {
                 return;
             }
 
-            const quantity = parseFloat(saleForm.quantityKg);
-            if (selectedRiceStock !== null && quantity > selectedRiceStock) {
+            const totalQuantityKg = parseFloat(saleForm.totalQuantityKg);
+            if (selectedRiceStock !== null && totalQuantityKg > selectedRiceStock) {
                 enqueueSnackbar(
-                    `Insufficient stock. Available: ${selectedRiceStock}kg`, 
+                    `Insufficient stock. Available: ${selectedRiceStock}kg, Requested: ${totalQuantityKg}kg`, 
                     { variant: 'error' }
                 );
                 return;
@@ -229,11 +262,14 @@ const SalesManagement = () => {
                 customerPhone: saleForm.phone,
                 customerAddress: saleForm.address,
                 riceVarietyId: saleForm.riceVarietyId,
-                quantityKg: quantity,
+                quantityKg: totalQuantityKg,
+                packetSize: parseFloat(saleForm.packetSize),
+                packetQuantity: parseInt(saleForm.packetQuantity),
                 unitPrice: parseFloat(saleForm.unitPrice),
                 paidAmount: parseFloat(saleForm.paidAmount || 0),
                 paymentMethod: saleForm.paymentMethod,
-                notes: saleForm.notes
+                notes: saleForm.notes,
+                saleDate: saleForm.saleDate.toISOString().split('T')[0] // Format date as YYYY-MM-DD
             };
             
             await api.post('/sales', requestData);
@@ -249,13 +285,16 @@ const SalesManagement = () => {
                 phone: '',
                 address: '',
                 riceVarietyId: '',
-                quantityKg: '',
+                packetSize: '5',
+                packetQuantity: '',
                 unitPrice: '',
                 paidAmount: '',
                 paymentMethod: 'cash',
                 notes: '',
                 totalPrice: '',
-                pendingAmount: ''
+                pendingAmount: '',
+                totalQuantityKg: '',
+                saleDate: new Date() // Reset to current date
             });
             setSelectedRiceStock(null);
             
@@ -278,82 +317,83 @@ const SalesManagement = () => {
         }
     };
 
-const handleRecordPayment = async (target, isCustomerPayment = false) => {
-    try {
-        const maxAmount = isCustomerPayment ? target.total_pending : target.pending_amount;
-        const amount = prompt(`Enter payment amount (Max: ${maxAmount}):`);
-        
-        if (!amount || isNaN(amount)) return;
-        
-        const paymentAmount = parseFloat(amount);
-        if (paymentAmount > maxAmount) {
-            enqueueSnackbar(`Payment amount exceeds pending amount (Max: ${maxAmount})`, { variant: 'error' });
-            return;
-        }
+    const handleRecordPayment = async (target, isCustomerPayment = false) => {
+        try {
+            const maxAmount = isCustomerPayment ? target.total_pending : target.pending_amount;
+            const amount = prompt(`Enter payment amount (Max: ${maxAmount}):`);
+            
+            if (!amount || isNaN(amount)) return;
+            
+            const paymentAmount = parseFloat(amount);
+            if (paymentAmount > maxAmount) {
+                enqueueSnackbar(`Payment amount exceeds pending amount (Max: ${maxAmount})`, { variant: 'error' });
+                return;
+            }
 
-        setLoading(true);
-        
-        if (isCustomerPayment) {
-            await api.post(`/sales/customers/${target.id}/payments`, {
-                amount: paymentAmount,
-                paymentMethod: 'cash',
-                notes: `General payment for customer ${target.name}`
-            });
-        } else {
-            await api.post(`/sales/${target.id}/payments`, {
-                amount: paymentAmount,
-                paymentMethod: 'cash',
-                notes: `Payment for sale #${target.id}`
-            });
+            setLoading(true);
+            
+            if (isCustomerPayment) {
+                await api.post(`/sales/customers/${target.id}/payments`, {
+                    amount: paymentAmount,
+                    paymentMethod: 'cash',
+                    notes: `General payment for customer ${target.name}`
+                });
+            } else {
+                await api.post(`/sales/${target.id}/payments`, {
+                    amount: paymentAmount,
+                    paymentMethod: 'cash',
+                    notes: `Payment for sale #${target.id}`
+                });
+            }
+            
+            enqueueSnackbar('Payment recorded successfully', { variant: 'success' });
+            
+            const [salesRes, customersRes] = await Promise.all([
+                api.get('/sales'),
+                api.get('/sales/customers')
+            ]);
+            
+            setSales(salesRes.data.data || []);
+            setCustomers(customersRes.data.data || []);
+            
+        } catch (error) {
+            console.error('Error recording payment:', error);
+            enqueueSnackbar(error.response?.data?.message || 'Failed to record payment', { variant: 'error' });
+        } finally {
+            setLoading(false);
         }
-        
-        enqueueSnackbar('Payment recorded successfully', { variant: 'success' });
-        
-        const [salesRes, customersRes] = await Promise.all([
-            api.get('/sales'),
-            api.get('/sales/customers')
-        ]);
-        
-        setSales(salesRes.data.data || []);
-        setCustomers(customersRes.data.data || []);
-        
-    } catch (error) {
-        console.error('Error recording payment:', error);
-        enqueueSnackbar(error.response?.data?.message || 'Failed to record payment', { variant: 'error' });
-    } finally {
-        setLoading(false);
-    }
-};
+    };
 
     return (
-        <Box sx={{ p: 3 }}>
-            <Typography variant="h4" gutterBottom>
-                Rice Sales Management
-            </Typography>
-            
-            <Paper sx={{ mb: 3 }}>
-                <Tabs 
-                    value={tabValue} 
-                    onChange={handleTabChange}
-                    aria-label="sales management tabs"
-                >
-                    <Tab label="Sales" icon={<ShoppingCartIcon />} />
-                    <Tab label="Customers" icon={<PeopleIcon />} />
-                </Tabs>
-            </Paper>
-            
-            {loading && <LinearProgress />}
-            
-            <TabPanel value={tabValue} index={0}>
-                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
-                    <Button
-                        variant="contained"
-                        startIcon={<AddIcon />}
-                        onClick={() => setOpenSaleDialog(true)}
+        <LocalizationProvider dateAdapter={AdapterDateFns}>
+            <Box sx={{ p: 3 }}>
+                <Typography variant="h4" gutterBottom>
+                    Rice Sales Management
+                </Typography>
+                
+                <Paper sx={{ mb: 3 }}>
+                    <Tabs 
+                        value={tabValue} 
+                        onChange={handleTabChange}
+                        aria-label="sales management tabs"
                     >
-                        New Sale
-                    </Button>
-                </Box>
+                        <Tab label="Sales" icon={<ShoppingCartIcon />} />
+                        <Tab label="Customers" icon={<PeopleIcon />} />
+                    </Tabs>
+                </Paper>
+                
+                {loading && <LinearProgress />}
+                
+                <TabPanel value={tabValue} index={0}>
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+                        <Button
+                            variant="contained"
+                            startIcon={<AddIcon />}
+                            onClick={() => setOpenSaleDialog(true)}
+                        >
+                            New Sale
+                        </Button>
+                    </Box>
                 
                 <TableContainer component={Paper}>
                     <Table>
@@ -362,6 +402,8 @@ const handleRecordPayment = async (target, isCustomerPayment = false) => {
                                 <TableCell>Date</TableCell>
                                 <TableCell>Customer</TableCell>
                                 <TableCell>Rice Type</TableCell>
+                                <TableCell>Packet Size</TableCell>
+                                <TableCell>Packets</TableCell>
                                 <TableCell>Quantity (kg)</TableCell>
                                 <TableCell>Unit Price</TableCell>
                                 <TableCell>Total</TableCell>
@@ -385,6 +427,8 @@ const handleRecordPayment = async (target, isCustomerPayment = false) => {
                                                 </Tooltip>
                                             )}
                                         </TableCell>
+                                        <TableCell>{sale.packet_size ? `${sale.packet_size}kg` : 'N/A'}</TableCell>
+                                        <TableCell>{sale.packet_quantity || 'N/A'}</TableCell>
                                         <TableCell>{sale.quantity_kg}</TableCell>
                                         <TableCell>{sale.unit_price}</TableCell>
                                         <TableCell>{sale.total_price}</TableCell>
@@ -456,37 +500,46 @@ const handleRecordPayment = async (target, isCustomerPayment = false) => {
                 </TableContainer>
             </TabPanel>
             
-            <Dialog 
-                open={openSaleDialog} 
-                onClose={() => setOpenSaleDialog(false)} 
-                maxWidth="sm" 
-                fullWidth
-                aria-labelledby="new-sale-dialog"
-            >
-                <DialogTitle id="new-sale-dialog">New Rice Sale</DialogTitle>
-                <DialogContent>
-                    <Box sx={{ mt: 2 }}>
-                        <FormControl component="fieldset" sx={{ mb: 3 }}>
-                            <FormLabel component="legend">Customer Option</FormLabel>
-                            <RadioGroup
-                                row
-                                name="customerOption"
-                                value={saleForm.customerOption}
-                                onChange={handleCustomerOptionChange}
-                                aria-label="customer option"
-                            >
-                                <FormControlLabel 
-                                    value="existing" 
-                                    control={<Radio />} 
-                                    label="Existing Customer" 
-                                />
-                                <FormControlLabel 
-                                    value="new" 
-                                    control={<Radio />} 
-                                    label="New Customer" 
-                                />
-                            </RadioGroup>
-                        </FormControl>
+                <Dialog 
+                    open={openSaleDialog} 
+                    onClose={() => setOpenSaleDialog(false)} 
+                    maxWidth="sm" 
+                    fullWidth
+                    aria-labelledby="new-sale-dialog"
+                >
+                    <DialogTitle id="new-sale-dialog">New Rice Sale</DialogTitle>
+                    <DialogContent>
+                        <Box sx={{ mt: 2 }}>
+                            {/* Add Date Picker at the top */}
+                            <DatePicker
+                                label="Sale Date"
+                                value={saleForm.saleDate}
+                                onChange={handleDateChange}
+                                renderInput={(params) => <TextField {...params} fullWidth sx={{ mb: 2 }} />}
+                                maxDate={new Date()}
+                            />
+
+                            <FormControl component="fieldset" sx={{ mb: 3 }}>
+                                <FormLabel component="legend">Customer Option</FormLabel>
+                                <RadioGroup
+                                    row
+                                    name="customerOption"
+                                    value={saleForm.customerOption}
+                                    onChange={handleCustomerOptionChange}
+                                    aria-label="customer option"
+                                >
+                                    <FormControlLabel 
+                                        value="existing" 
+                                        control={<Radio />} 
+                                        label="Existing Customer" 
+                                    />
+                                    <FormControlLabel 
+                                        value="new" 
+                                        control={<Radio />} 
+                                        label="New Customer" 
+                                    />
+                                </RadioGroup>
+                            </FormControl>
 
                         {saleForm.customerOption === 'existing' ? (
                             <FormControl fullWidth sx={{ mb: 2 }}>
@@ -557,34 +610,56 @@ const handleRecordPayment = async (target, isCustomerPayment = false) => {
 
                         {selectedRiceStock !== null && (
                             <Alert 
-                                severity={parseFloat(saleForm.quantityKg) > selectedRiceStock ? 'error' : 'info'}
+                                severity={saleForm.totalQuantityKg && parseFloat(saleForm.totalQuantityKg) > selectedRiceStock ? 'error' : 'info'}
                                 icon={<WarningIcon />}
                                 sx={{ mb: 2 }}
                             >
                                 Current stock: {selectedRiceStock}kg
-                                {parseFloat(saleForm.quantityKg) > selectedRiceStock && (
+                                {saleForm.totalQuantityKg && parseFloat(saleForm.totalQuantityKg) > selectedRiceStock && (
                                     <span> - Not enough stock!</span>
                                 )}
                             </Alert>
                         )}
 
-                        <TextField
-                            fullWidth
-                            sx={{ mb: 2 }}
-                            name="quantityKg"
-                            label="Quantity (kg)"
-                            type="number"
-                            value={saleForm.quantityKg}
-                            onChange={handleSaleChange}
-                            required
-                            inputProps={{ min: 0.01, step: 0.01 }}
-                        />
+                        <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+                            <FormControl fullWidth>
+                                <InputLabel id="packet-size-label">Packet Size</InputLabel>
+                                <Select
+                                    name="packetSize"
+                                    value={saleForm.packetSize}
+                                    onChange={handleSaleChange}
+                                    labelId="packet-size-label"
+                                    label="Packet Size"
+                                    required
+                                >
+                                    <MenuItem value="5">5kg</MenuItem>
+                                    <MenuItem value="10">10kg</MenuItem>
+                                </Select>
+                            </FormControl>
+
+                            <TextField
+                                fullWidth
+                                name="packetQuantity"
+                                label="Number of Packets"
+                                type="number"
+                                value={saleForm.packetQuantity}
+                                onChange={handleSaleChange}
+                                required
+                                inputProps={{ min: 1, step: 1 }}
+                            />
+                        </Box>
+
+                        {saleForm.totalQuantityKg && (
+                            <Typography variant="body1" sx={{ mb: 2, fontWeight: 'bold' }}>
+                                Total Quantity: {saleForm.totalQuantityKg} kg
+                            </Typography>
+                        )}
 
                         <TextField
                             fullWidth
                             sx={{ mb: 2 }}
                             name="unitPrice"
-                            label="Unit Price"
+                            label="Unit Price (per kg)"
                             type="number"
                             value={saleForm.unitPrice}
                             onChange={handleSaleChange}
@@ -592,9 +667,9 @@ const handleRecordPayment = async (target, isCustomerPayment = false) => {
                             inputProps={{ min: 0.01, step: 0.01 }}
                         />
 
-                        {saleForm.quantityKg && saleForm.unitPrice && (
-                            <Typography variant="body1" sx={{ mb: 2 }}>
-                                Total: {(parseFloat(saleForm.quantityKg) * parseFloat(saleForm.unitPrice)).toFixed(2)}
+                        {saleForm.totalPrice && (
+                            <Typography variant="body1" sx={{ mb: 2, fontWeight: 'bold' }}>
+                                Total Price: {saleForm.totalPrice}
                             </Typography>
                         )}
 
@@ -609,12 +684,9 @@ const handleRecordPayment = async (target, isCustomerPayment = false) => {
                             inputProps={{ min: 0, step: 0.01 }}
                         />
 
-                        {saleForm.paidAmount && saleForm.quantityKg && saleForm.unitPrice && (
-                            <Typography variant="body1" sx={{ mb: 2 }}>
-                                Pending: {(
-                                    parseFloat(saleForm.quantityKg) * parseFloat(saleForm.unitPrice) - 
-                                    (parseFloat(saleForm.paidAmount) || 0)
-                                ).toFixed(2)}
+                        {saleForm.pendingAmount && (
+                            <Typography variant="body1" sx={{ mb: 2, fontWeight: 'bold' }}>
+                                Pending Amount: {saleForm.pendingAmount}
                             </Typography>
                         )}
 
@@ -645,24 +717,27 @@ const handleRecordPayment = async (target, isCustomerPayment = false) => {
                         />
                     </Box>
                 </DialogContent>
-                <DialogActions>
-                    <Button 
-                        onClick={() => setOpenSaleDialog(false)}
-                        aria-label="cancel sale"
-                    >
-                        Cancel
-                    </Button>
-                    <Button 
-                        onClick={handleSaleSubmit}
-                        variant="contained"
-                        disabled={loading || (selectedRiceStock !== null && parseFloat(saleForm.quantityKg) > selectedRiceStock)}
-                        aria-label="save sale"
-                    >
-                        Save Sale
-                    </Button>
-                </DialogActions>
-            </Dialog>
-        </Box>
+                    <DialogActions>
+                        <Button 
+                            onClick={() => setOpenSaleDialog(false)}
+                            aria-label="cancel sale"
+                        >
+                            Cancel
+                        </Button>
+                        <Button 
+                            onClick={handleSaleSubmit}
+                            variant="contained"
+                            disabled={loading || 
+                                (selectedRiceStock !== null && saleForm.totalQuantityKg && 
+                                 parseFloat(saleForm.totalQuantityKg) > selectedRiceStock)}
+                            aria-label="save sale"
+                        >
+                            Save Sale
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+            </Box>
+        </LocalizationProvider>
     );
 };
 

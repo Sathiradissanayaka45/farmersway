@@ -21,6 +21,14 @@ import ExtraIncomePage from './pages/ExtraIncomePage';
 import ExtraExpensesPage from './pages/ExtraExpensesPage';
 import FinancialReportsPage from './pages/FinancialReportsPage';
 import Dashboard from './pages/Dashboard';
+import RiceTypeManagement from './pages/RiceTypeManagement';
+import CustomerPurchaseHistory from './pages/CustomerPurchaseHistory';
+import AccountingPage from './pages/AccountingPage';
+import ManualJournalEntryPage from './pages/ManualJournalEntryPage';
+import AccountManagementPage from './pages/AccountManagementPage';
+import AccountDetailsPage from './pages/AccountDetailsPage';
+import EditJournalEntryPage from './pages/EditJournalEntryPage';
+
 
 // Create theme
 const theme = createTheme({
@@ -91,6 +99,11 @@ function App() {
                       <RiceManagement />
                   </ProtectedRoute>
                 } />
+                <Route path="rice-types" element={
+  <ProtectedRoute roles={['admin', 'super_admin']}>
+    <RiceTypeManagement />
+  </ProtectedRoute>
+} />
                 <Route path="purchases" element={
     <ProtectedRoute roles={['admin', 'super_admin']}>
         <PurchaseManagement />
@@ -126,6 +139,11 @@ function App() {
     <MillingDetailsPage />
   </ProtectedRoute>
 } />
+<Route path="customer-purchases/:id" element={
+    <ProtectedRoute roles={['admin', 'super_admin']}>
+        <CustomerPurchaseHistory />
+    </ProtectedRoute>
+} />
 <Route path="sales" element={
   <ProtectedRoute roles={['admin', 'super_admin']}>
     <SalesManagement />
@@ -154,6 +172,31 @@ function App() {
 <Route index element={
   <ProtectedRoute roles={['admin', 'super_admin']}>
     <Dashboard />
+  </ProtectedRoute>
+} />
+<Route path="accounting" element={
+  <ProtectedRoute roles={['admin', 'super_admin']}>
+    <AccountingPage />
+  </ProtectedRoute>
+} />
+<Route path="manual-journal-entry" element={
+  <ProtectedRoute roles={['admin', 'super_admin']}>
+    <ManualJournalEntryPage />
+  </ProtectedRoute>
+} />
+<Route path="accounts" element={
+  <ProtectedRoute roles={['admin', 'super_admin']}>
+    <AccountManagementPage />
+  </ProtectedRoute>
+} />
+<Route path="account-details/:id" element={
+  <ProtectedRoute roles={['admin', 'super_admin']}>
+    <AccountDetailsPage />
+  </ProtectedRoute>
+} />
+<Route path="edit-journal-entry/:id" element={
+  <ProtectedRoute roles={['admin', 'super_admin']}>
+    <EditJournalEntryPage />
   </ProtectedRoute>
 } />
                 {/* Add more dashboard routes here */}

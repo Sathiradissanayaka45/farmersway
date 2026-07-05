@@ -38,8 +38,10 @@ const InventoryManagement = () => {
   const { api } = useAuth();
   const { enqueueSnackbar } = useSnackbar();
   const [riceVarieties, setRiceVarieties] = useState([]);
+  const [riceTypes, setRiceTypes] = useState([]); // Add rice types state
   const [filteredRiceVarieties, setFilteredRiceVarieties] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [riceTypesLoading, setRiceTypesLoading] = useState(true);
   const [openDialog, setOpenDialog] = useState(false);
   const [openHistoryDialog, setOpenHistoryDialog] = useState(false);
   const [adjustmentForm, setAdjustmentForm] = useState({
@@ -56,13 +58,52 @@ const InventoryManagement = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [riceTypeFilter, setRiceTypeFilter] = useState('all');
 
+  // Fetch rice types from database
+  const fetchRiceTypes = async () => {
+    try {
+      setRiceTypesLoading(true);
+      const response = await api.get('/rice-types');
+      if (response.data && response.data.success) {
+        setRiceTypes(response.data.data);
+      } else {
+        enqueueSnackbar('Failed to load rice types', { 
+          variant: 'warning',
+          autoHideDuration: 3000
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching rice types:', error);
+      enqueueSnackbar('Failed to fetch rice types. Please check if rice-types API is working.', { 
+        variant: 'error',
+        autoHideDuration: 5000
+      });
+      // Set default types as fallback
+      setRiceTypes([
+        { id: 1, name: 'paddy', description: 'Raw paddy rice' },
+        { id: 2, name: 'selling', description: 'Selling quality rice' }
+      ]);
+    } finally {
+      setRiceTypesLoading(false);
+    }
+  };
+
   const fetchRiceVarieties = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/inventory');
-      const varieties = response.data.data || [];
-      setRiceVarieties(varieties);
-      setFilteredRiceVarieties(varieties);
+      const response = await api.get('/rice'); // Changed from '/inventory' to '/rice'
+      
+      if (response.data && response.data.success) {
+        const varieties = response.data.data || [];
+        setRiceVarieties(varieties);
+        setFilteredRiceVarieties(varieties);
+      } else {
+        enqueueSnackbar('No rice varieties data received', { 
+          variant: 'warning',
+          autoHideDuration: 2000
+        });
+        setRiceVarieties([]);
+        setFilteredRiceVarieties([]);
+      }
     } catch (error) {
       console.error('Error fetching rice varieties:', error);
       enqueueSnackbar('Failed to fetch inventory data', { variant: 'error' });
@@ -72,6 +113,26 @@ const InventoryManagement = () => {
       setLoading(false);
     }
   };
+
+  // Fetch adjustment history
+  const fetchAdjustmentHistory = async (riceId) => {
+    try {
+      setLoading(true);
+      const response = await api.get(`/inventory/adjustments?riceId=${riceId}`);
+      setHistoryData(response.data.data || []);
+      setOpenHistoryDialog(true);
+    } catch (error) {
+      console.error('Error fetching adjustment history:', error);
+      enqueueSnackbar('Failed to fetch adjustment history', { variant: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRiceTypes();
+    fetchRiceVarieties();
+  }, []);
 
   // Apply filters whenever searchTerm, statusFilter, or riceTypeFilter changes
   useEffect(() => {
@@ -95,31 +156,16 @@ const InventoryManagement = () => {
       });
     }
     
-    // Apply rice type filter
+    // Apply rice type filter - updated to use rice_type_id
     if (riceTypeFilter !== 'all') {
-      filtered = filtered.filter(rice => rice.rice_type === riceTypeFilter);
+      filtered = filtered.filter(rice => 
+        rice.rice_type?.toString() === riceTypeFilter || 
+        rice.rice_type_id?.toString() === riceTypeFilter
+      );
     }
     
     setFilteredRiceVarieties(filtered);
   }, [searchTerm, statusFilter, riceTypeFilter, riceVarieties]);
-
-  const fetchAdjustmentHistory = async (riceId) => {
-    try {
-      setLoading(true);
-      const response = await api.get(`/inventory/adjustments?riceId=${riceId}`);
-      setHistoryData(response.data.data || []);
-      setOpenHistoryDialog(true);
-    } catch (error) {
-      console.error('Error fetching adjustment history:', error);
-      enqueueSnackbar('Failed to fetch adjustment history', { variant: 'error' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchRiceVarieties();
-  }, []);
 
   const handleAdjustmentChange = (e) => {
     const { name, value } = e.target;
@@ -137,7 +183,8 @@ const InventoryManagement = () => {
       }
 
       setLoading(true);
-      await api.post(`/inventory/${adjustmentForm.riceVarietyId}/adjust`, {
+      // Use the updated endpoint from rice controller
+      await api.put(`/rice/${adjustmentForm.riceVarietyId}/stock`, {
         adjustment: parseFloat(adjustmentForm.adjustment),
         notes: adjustmentForm.notes
       });
@@ -158,6 +205,13 @@ const InventoryManagement = () => {
     }
   };
 
+  // Get rice type name by ID
+  const getRiceTypeName = (riceTypeId) => {
+    if (!riceTypeId) return 'Unknown';
+    const type = riceTypes.find(t => t.id === riceTypeId);
+    return type ? type.name : 'Unknown';
+  };
+
   return (
     <Box sx={{ p: 3 }}>
       <Typography variant="h4" gutterBottom>
@@ -169,6 +223,7 @@ const InventoryManagement = () => {
           variant="contained"
           startIcon={<AddIcon />}
           onClick={() => setOpenDialog(true)}
+          disabled={riceTypesLoading}
         >
           Adjust Inventory
         </Button>
@@ -233,10 +288,14 @@ const InventoryManagement = () => {
             onChange={(e) => setRiceTypeFilter(e.target.value)}
             label="Filter by Rice Type"
             sx={{ borderRadius: 2 }}
+            disabled={riceTypesLoading}
           >
             <MenuItem value="all">All Types</MenuItem>
-            <MenuItem value="paddy">Paddy</MenuItem>
-            <MenuItem value="selling">Selling</MenuItem>
+            {riceTypes.map((type) => (
+              <MenuItem key={type.id} value={type.id.toString()}>
+                {type.name}
+              </MenuItem>
+            ))}
           </Select>
         </FormControl>
       </Box>
@@ -261,13 +320,17 @@ const InventoryManagement = () => {
                 <TableCell>{rice.name}</TableCell>
                 <TableCell>
                   <Chip 
-                    label={rice.rice_type === 'paddy' ? 'Paddy' : 'Selling'} 
-                    color={rice.rice_type === 'paddy' ? 'primary' : 'secondary'} 
+                    label={getRiceTypeName(rice.rice_type || rice.rice_type_id)} 
+                    color={getRiceTypeName(rice.rice_type || rice.rice_type_id)?.toLowerCase() === 'paddy' ? 'primary' : 'secondary'} 
                     size="small" 
                   />
                 </TableCell>
-                <TableCell align="right">{rice.current_stock_kg}</TableCell>
-                <TableCell align="right">{rice.min_stock_level}</TableCell>
+                <TableCell align="right">
+                  {parseFloat(rice.current_stock_kg || 0).toFixed(2)}
+                </TableCell>
+                <TableCell align="right">
+                  {parseFloat(rice.min_stock_level || 100).toFixed(2)}
+                </TableCell>
                 <TableCell align="center">
                   {rice.current_stock_kg <= rice.min_stock_level ? (
                     <Chip label="Low Stock" color="error" size="small" />
@@ -277,21 +340,36 @@ const InventoryManagement = () => {
                 </TableCell>
                 <TableCell align="center">
                   <Tooltip title="Adjustment History">
-                    <IconButton onClick={() => fetchAdjustmentHistory(rice.id)}>
+                    <IconButton 
+                      onClick={() => fetchAdjustmentHistory(rice.id)}
+                      size="small"
+                    >
                       <HistoryIcon color="primary" />
                     </IconButton>
                   </Tooltip>
                   <Tooltip title="Edit Minimum Stock">
-                    <IconButton onClick={() => setEditMinStockDialog({
-                      open: true,
-                      riceItem: rice
-                    })}>
+                    <IconButton 
+                      onClick={() => setEditMinStockDialog({
+                        open: true,
+                        riceItem: rice
+                      })}
+                      size="small"
+                    >
                       <EditIcon color="secondary" />
                     </IconButton>
                   </Tooltip>
                 </TableCell>
               </TableRow>
             ))}
+            {filteredRiceVarieties.length === 0 && !loading && (
+              <TableRow>
+                <TableCell colSpan={6} align="center" sx={{ py: 3 }}>
+                  <Typography color="textSecondary">
+                    No rice varieties found. {riceTypes.length === 0 ? 'Please add rice types first.' : 'Add rice varieties to get started.'}
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
       </TableContainer>
@@ -302,17 +380,18 @@ const InventoryManagement = () => {
         <DialogContent>
           <Box sx={{ mt: 2 }}>
             <FormControl fullWidth sx={{ mb: 2 }}>
-              <InputLabel>Rice Variety</InputLabel>
+              <InputLabel>Rice Variety *</InputLabel>
               <Select
                 name="riceVarietyId"
                 value={adjustmentForm.riceVarietyId}
                 onChange={handleAdjustmentChange}
-                label="Rice Variety"
+                label="Rice Variety *"
                 required
+                disabled={riceTypesLoading || loading}
               >
                 {riceVarieties.map(rice => (
                   <MenuItem key={rice.id} value={rice.id}>
-                    {rice.name} ({rice.rice_type === 'paddy' ? 'Paddy' : 'Selling'})
+                    {rice.name} ({getRiceTypeName(rice.rice_type || rice.rice_type_id)})
                   </MenuItem>
                 ))}
               </Select>
@@ -322,12 +401,14 @@ const InventoryManagement = () => {
               fullWidth
               sx={{ mb: 2 }}
               name="adjustment"
-              label="Adjustment Amount (kg)"
+              label="Adjustment Amount (kg) *"
               type="number"
               value={adjustmentForm.adjustment}
               onChange={handleAdjustmentChange}
               required
               helperText="Use positive number to add stock, negative to remove"
+              disabled={loading}
+              inputProps={{ step: "0.01" }}
             />
 
             <TextField
@@ -339,17 +420,23 @@ const InventoryManagement = () => {
               onChange={handleAdjustmentChange}
               multiline
               rows={3}
+              disabled={loading}
             />
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenDialog(false)}>Cancel</Button>
+          <Button 
+            onClick={() => setOpenDialog(false)}
+            disabled={loading}
+          >
+            Cancel
+          </Button>
           <Button 
             onClick={handleSubmitAdjustment}
             variant="contained"
-            disabled={loading}
+            disabled={loading || !adjustmentForm.riceVarietyId || !adjustmentForm.adjustment}
           >
-            Save Adjustment
+            {loading ? 'Processing...' : 'Save Adjustment'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -363,36 +450,49 @@ const InventoryManagement = () => {
       >
         <DialogTitle>Inventory Adjustment History</DialogTitle>
         <DialogContent>
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Date</TableCell>
-                  <TableCell>Adjustment</TableCell>
-                  <TableCell>Previous Stock</TableCell>
-                  <TableCell>New Stock</TableCell>
-                  <TableCell>Notes</TableCell>
-                  <TableCell>Adjusted By</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {historyData.map((item) => (
-                  <TableRow key={item.id}>
-                    <TableCell>
-                      {new Date(item.adjustment_date).toLocaleString()}
-                    </TableCell>
-                    <TableCell>
-                      {item.adjustment_amount > 0 ? '+' : ''}{item.adjustment_amount}kg
-                    </TableCell>
-                    <TableCell>{item.previous_stock}kg</TableCell>
-                    <TableCell>{item.new_stock}kg</TableCell>
-                    <TableCell>{item.notes}</TableCell>
-                    <TableCell>{item.adjusted_by_name}</TableCell>
+          {historyData.length === 0 ? (
+            <Box sx={{ py: 3, textAlign: 'center' }}>
+              <Typography color="textSecondary">
+                No adjustment history found for this rice variety.
+              </Typography>
+            </Box>
+          ) : (
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Date</TableCell>
+                    <TableCell>Adjustment</TableCell>
+                    <TableCell>Previous Stock</TableCell>
+                    <TableCell>New Stock</TableCell>
+                    <TableCell>Notes</TableCell>
+                    <TableCell>Adjusted By</TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+                </TableHead>
+                <TableBody>
+                  {historyData.map((item) => (
+                    <TableRow key={item.id}>
+                      <TableCell>
+                        {new Date(item.adjustment_date).toLocaleString()}
+                      </TableCell>
+                      <TableCell>
+                        <Chip 
+                          label={`${item.adjustment_amount > 0 ? '+' : ''}${parseFloat(item.adjustment_amount).toFixed(2)}kg`}
+                          color={item.adjustment_amount > 0 ? 'success' : 'error'}
+                          size="small"
+                          variant="outlined"
+                        />
+                      </TableCell>
+                      <TableCell>{parseFloat(item.previous_stock).toFixed(2)}kg</TableCell>
+                      <TableCell>{parseFloat(item.new_stock).toFixed(2)}kg</TableCell>
+                      <TableCell>{item.notes || '-'}</TableCell>
+                      <TableCell>{item.adjusted_by_name || 'System'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpenHistoryDialog(false)}>Close</Button>

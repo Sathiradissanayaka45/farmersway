@@ -1,6 +1,6 @@
 const mysql = require('mysql2/promise');
-const { format } = require('date-fns');
 require('dotenv').config();
+const { recordSalesAccounting, recordPaymentReceivedAccounting  } = require('../middleware/accountingIntegration');
 
 const pool = mysql.createPool({
     host: process.env.DB_HOST,
@@ -12,7 +12,291 @@ const pool = mysql.createPool({
     queueLimit: 0
 });
 
-// Create a new selling customer
+const createRiceSale = async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        const { 
+            customerId, 
+            customerName, 
+            customerPhone, 
+            customerAddress,
+            riceVarietyId, 
+            packetSize,
+            packetQuantity,
+            quantityKg,
+            unitPrice, 
+            paidAmount,
+            paymentMethod = 'cash',
+            referenceNumber,
+            notes,
+            saleDate
+        } = req.body;
+        
+        const createdBy = req.user.id;
+        const finalSaleDate = saleDate ? new Date(saleDate) : new Date();
+        
+        // Calculate total quantity from packets
+        const calculatedQuantityKg = parseFloat(packetSize) * parseInt(packetQuantity);
+        const totalPrice = calculatedQuantityKg * unitPrice;
+        const pendingAmount = totalPrice - (paidAmount || 0);
+
+        // 1. Validate rice variety exists and has sufficient stock
+        const [riceVarieties] = await connection.query(
+            'SELECT current_stock_kg FROM rice_varieties WHERE id = ?',
+            [riceVarietyId]
+        );
+
+        if (riceVarieties.length === 0) {
+            await connection.rollback();
+            return res.status(404).json({
+                success: false,
+                message: 'Rice variety not found'
+            });
+        }
+
+        const currentStock = parseFloat(riceVarieties[0].current_stock_kg);
+        if (currentStock < calculatedQuantityKg) {
+            await connection.rollback();
+            return res.status(400).json({
+                success: false,
+                message: `Insufficient stock. Available: ${currentStock}kg, Requested: ${calculatedQuantityKg}kg`
+            });
+        }
+
+        let finalCustomerId = customerId;
+
+        // 2. Handle customer - check if exists by phone first
+        if (!customerId && customerPhone) {
+            const [existingCustomers] = await connection.query(
+                'SELECT id, name FROM selling_customers WHERE phone = ?',
+                [customerPhone]
+            );
+
+            if (existingCustomers.length > 0) {
+                finalCustomerId = existingCustomers[0].id;
+            } else if (customerName) {
+                // Only create new customer if name is provided
+                const [customerResult] = await connection.query(
+                    `INSERT INTO selling_customers 
+                    (name, phone, address, customer_type) 
+                    VALUES (?, ?, ?, 'retail')`,
+                    [customerName, customerPhone, customerAddress || null]
+                );
+                finalCustomerId = customerResult.insertId;
+            } else {
+                await connection.rollback();
+                return res.status(400).json({
+                    success: false,
+                    message: 'Customer name is required for new customers'
+                });
+            }
+        } else if (!customerId) {
+            await connection.rollback();
+            return res.status(400).json({
+                success: false,
+                message: 'Customer information is required'
+            });
+        }
+
+        // 3. Create sale record with packet information and custom date
+        const [saleResult] = await connection.query(
+            `INSERT INTO rice_sales 
+            (customer_id, rice_variety_id, packet_size, packet_quantity, quantity_kg, unit_price, total_price, 
+             paid_amount, pending_amount, sale_date, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                finalCustomerId, 
+                riceVarietyId, 
+                packetSize, 
+                packetQuantity, 
+                calculatedQuantityKg, 
+                unitPrice, 
+                totalPrice, 
+                paidAmount || 0, 
+                pendingAmount, 
+                finalSaleDate,
+                createdBy
+            ]
+        );
+
+        // 4. Update customer financials
+        await connection.query(
+            `UPDATE selling_customers 
+             SET total_purchases = total_purchases + ?,
+                 total_paid = total_paid + ?,
+                 total_pending = total_pending + ?
+             WHERE id = ?`,
+            [totalPrice, paidAmount || 0, pendingAmount, finalCustomerId]
+        );
+
+        // 5. Update rice inventory
+        await connection.query(
+            `UPDATE rice_varieties 
+             SET current_stock_kg = current_stock_kg - ?
+             WHERE id = ?`,
+            [calculatedQuantityKg, riceVarietyId]
+        );
+
+        // 6. Record inventory adjustment
+        await connection.query(
+            `INSERT INTO inventory_adjustments 
+            (rice_variety_id, adjustment_amount, previous_stock, new_stock, notes, adjusted_by)
+            VALUES (?, ?, ?, ?, ?, ?)`,
+            [
+                riceVarietyId, 
+                -calculatedQuantityKg, 
+                currentStock, 
+                currentStock - calculatedQuantityKg,
+                `Sold ${packetQuantity} packets of ${packetSize}kg (total ${calculatedQuantityKg}kg) to customer ${finalCustomerId}`,
+                createdBy
+            ]
+        );
+
+        // 7. Record payment if any amount was paid
+        if (paidAmount > 0) {
+            await connection.query(
+                `INSERT INTO sales_payments 
+                (sale_id, customer_id, amount, payment_method, reference_number, notes, created_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                [saleResult.insertId, finalCustomerId, paidAmount, paymentMethod, referenceNumber, notes, createdBy]
+            );
+        }
+
+        await connection.commit();
+
+        // 8. Create journal entry for the sale AFTER commit
+        try {
+            await recordSalesAccounting({
+                saleId: saleResult.insertId,
+                customerId: finalCustomerId,
+                customerName: customerName || (await getCustomerName(connection, finalCustomerId)),
+                riceVarietyId,
+                quantityKg: calculatedQuantityKg,
+                unitPrice,
+                totalPrice,
+                paidAmount: paidAmount || 0,
+                pendingAmount,
+                paymentMethod: paidAmount > 0 ? paymentMethod : null,
+                notes
+            }, createdBy);
+        } catch (accountingError) {
+            console.error('Accounting entry creation failed for sale:', accountingError);
+            // Don't fail the sale if accounting fails
+        }
+
+        res.status(201).json({
+            success: true,
+            message: 'Rice sale recorded successfully',
+            data: {
+                saleId: saleResult.insertId,
+                customerId: finalCustomerId,
+                packetSize,
+                packetQuantity,
+                totalQuantityKg: calculatedQuantityKg,
+                totalPrice,
+                pendingAmount,
+                saleDate: finalSaleDate
+            }
+        });
+    } catch (error) {
+        await connection.rollback();
+        console.error('Error recording rice sale:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to record rice sale',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    } finally {
+        connection.release();
+    }
+};
+const getCustomerName = async (connection, customerId) => {
+    const [rows] = await connection.query(
+        'SELECT name FROM selling_customers WHERE id = ?',
+        [customerId]
+    );
+    return rows.length > 0 ? rows[0].name : `Customer #${customerId}`;
+};
+// Get all rice sales (updated to include packet info)
+const getAllRiceSales = async (req, res) => {
+    try {
+        const [sales] = await pool.query(`
+            SELECT 
+                rs.id, 
+                rs.packet_size,
+                rs.packet_quantity,
+                rs.quantity_kg, 
+                rs.unit_price, 
+                rs.total_price,
+                rs.paid_amount, 
+                rs.pending_amount, 
+                rs.sale_date,
+                sc.id as customer_id, 
+                sc.name as customer_name, 
+                sc.phone, 
+                sc.customer_type,
+                rv.id as rice_variety_id, 
+                rv.name as rice_variety_name,
+                u.username as created_by
+            FROM rice_sales rs
+            JOIN selling_customers sc ON rs.customer_id = sc.id
+            JOIN rice_varieties rv ON rs.rice_variety_id = rv.id
+            LEFT JOIN admin_users u ON rs.created_by = u.id
+            ORDER BY rs.sale_date DESC
+        `);
+
+        res.json({
+            success: true,
+            data: sales
+        });
+    } catch (error) {
+        console.error('Error fetching rice sales:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch rice sales'
+        });
+    }
+};
+
+// Get sales by customer (updated to include packet info)
+const getSalesByCustomer = async (req, res) => {
+    try {
+        const { customerId } = req.params;
+        
+        const [sales] = await pool.query(`
+            SELECT 
+                rs.id, 
+                rs.packet_size,
+                rs.packet_quantity,
+                rs.quantity_kg, 
+                rs.unit_price, 
+                rs.total_price,
+                rs.paid_amount, 
+                rs.pending_amount, 
+                rs.sale_date,
+                rv.name as rice_variety_name
+            FROM rice_sales rs
+            JOIN rice_varieties rv ON rs.rice_variety_id = rv.id
+            WHERE rs.customer_id = ?
+            ORDER BY rs.sale_date DESC
+        `, [customerId]);
+
+        res.json({
+            success: true,
+            data: sales
+        });
+    } catch (error) {
+        console.error('Error fetching customer sales:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch customer sales'
+        });
+    }
+};
+
+// Other functions remain the same (createSellingCustomer, getAllSellingCustomers, etc.)
 const createSellingCustomer = async (req, res) => {
     try {
         const { name, phone, address, customer_type = 'retail' } = req.body;
@@ -64,7 +348,6 @@ const createSellingCustomer = async (req, res) => {
     }
 };
 
-// Get all selling customers
 const getAllSellingCustomers = async (req, res) => {
     try {
         const [customers] = await pool.query(
@@ -84,7 +367,6 @@ const getAllSellingCustomers = async (req, res) => {
     }
 };
 
-// Get selling customer by ID
 const getSellingCustomerById = async (req, res) => {
     try {
         const { id } = req.params;
@@ -114,7 +396,6 @@ const getSellingCustomerById = async (req, res) => {
     }
 };
 
-// Get payments for a selling customer
 const getSalePayments = async (req, res) => {
     try {
         const { id } = req.params;
@@ -137,223 +418,6 @@ const getSalePayments = async (req, res) => {
     }
 };
 
-// Create a new rice sale
-const createRiceSale = async (req, res) => {
-    const connection = await pool.getConnection();
-    try {
-        await connection.beginTransaction();
-
-        const { 
-            customerId, 
-            customerName, 
-            customerPhone, 
-            customerAddress,
-            riceVarietyId, 
-            quantityKg, 
-            unitPrice, 
-            paidAmount,
-            paymentMethod = 'cash',
-            referenceNumber,
-            notes
-        } = req.body;
-        
-        const createdBy = req.user.id;
-        const saleDate = new Date();
-        const totalPrice = quantityKg * unitPrice;
-        const pendingAmount = totalPrice - paidAmount;
-
-        // 1. Validate rice variety exists and has sufficient stock
-        const [riceVarieties] = await connection.query(
-            'SELECT current_stock_kg FROM rice_varieties WHERE id = ?',
-            [riceVarietyId]
-        );
-
-        if (riceVarieties.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'Rice variety not found'
-            });
-        }
-
-        const currentStock = parseFloat(riceVarieties[0].current_stock_kg);
-        if (currentStock < quantityKg) {
-            return res.status(400).json({
-                success: false,
-                message: `Insufficient stock. Available: ${currentStock}kg`
-            });
-        }
-
-        let finalCustomerId = customerId;
-
-        // 2. Handle customer - check if exists by phone first
-        if (!customerId && customerPhone) {
-            const [existingCustomers] = await connection.query(
-                'SELECT id FROM selling_customers WHERE phone = ?',
-                [customerPhone]
-            );
-
-            if (existingCustomers.length > 0) {
-                finalCustomerId = existingCustomers[0].id;
-            } else if (customerName) {
-                // Only create new customer if name is provided
-                const [customerResult] = await connection.query(
-                    `INSERT INTO selling_customers 
-                    (name, phone, address, customer_type) 
-                    VALUES (?, ?, ?, 'retail')`,
-                    [customerName, customerPhone, customerAddress || null]
-                );
-                finalCustomerId = customerResult.insertId;
-            } else {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Customer name is required for new customers'
-                });
-            }
-        } else if (!customerId) {
-            return res.status(400).json({
-                success: false,
-                message: 'Customer information is required'
-            });
-        }
-
-        // 3. Create sale record
-        const [saleResult] = await connection.query(
-            `INSERT INTO rice_sales 
-            (customer_id, rice_variety_id, quantity_kg, unit_price, total_price, 
-             paid_amount, pending_amount, sale_date, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [finalCustomerId, riceVarietyId, quantityKg, unitPrice, totalPrice, 
-             paidAmount, pendingAmount, saleDate, createdBy]
-        );
-
-        // 4. Update customer financials
-        await connection.query(
-            `UPDATE selling_customers 
-             SET total_purchases = total_purchases + ?,
-                 total_paid = total_paid + ?,
-                 total_pending = total_pending + ?
-             WHERE id = ?`,
-            [totalPrice, paidAmount, pendingAmount, finalCustomerId]
-        );
-
-        // 5. Update rice inventory
-        await connection.query(
-            `UPDATE rice_varieties 
-             SET current_stock_kg = current_stock_kg - ?
-             WHERE id = ?`,
-            [quantityKg, riceVarietyId]
-        );
-
-        // 6. Record inventory adjustment
-        await connection.query(
-            `INSERT INTO inventory_adjustments 
-            (rice_variety_id, adjustment_amount, previous_stock, new_stock, notes, adjusted_by)
-            VALUES (?, ?, ?, ?, ?, ?)`,
-            [
-                riceVarietyId, 
-                -quantityKg, 
-                currentStock, 
-                currentStock - quantityKg,
-                `Sold ${quantityKg}kg to customer ${finalCustomerId}`,
-                createdBy
-            ]
-        );
-
-        // 7. Record payment if any amount was paid
-        if (paidAmount > 0) {
-            await connection.query(
-                `INSERT INTO sales_payments 
-                (sale_id, customer_id, amount, payment_method, reference_number, notes, created_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?)`,
-                [saleResult.insertId, finalCustomerId, paidAmount, paymentMethod, referenceNumber, notes, createdBy]
-            );
-        }
-
-        await connection.commit();
-
-        res.status(201).json({
-            success: true,
-            message: 'Rice sale recorded successfully',
-            data: {
-                saleId: saleResult.insertId,
-                customerId: finalCustomerId,
-                totalPrice,
-                pendingAmount
-            }
-        });
-    } catch (error) {
-        await connection.rollback();
-        console.error('Error recording rice sale:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to record rice sale',
-            error: process.env.NODE_ENV === 'development' ? error.message : undefined
-        });
-    } finally {
-        connection.release();
-    }
-};
-
-// Get all rice sales
-const getAllRiceSales = async (req, res) => {
-    try {
-        const [sales] = await pool.query(`
-            SELECT 
-                rs.id, rs.quantity_kg, rs.unit_price, rs.total_price,
-                rs.paid_amount, rs.pending_amount, rs.sale_date,
-                sc.id as customer_id, sc.name as customer_name, sc.phone, sc.customer_type,
-                rv.id as rice_variety_id, rv.name as rice_variety_name,
-                u.username as created_by
-            FROM rice_sales rs
-            JOIN selling_customers sc ON rs.customer_id = sc.id
-            JOIN rice_varieties rv ON rs.rice_variety_id = rv.id
-            LEFT JOIN admin_users u ON rs.created_by = u.id
-            ORDER BY rs.sale_date DESC
-        `);
-
-        res.json({
-            success: true,
-            data: sales
-        });
-    } catch (error) {
-        console.error('Error fetching rice sales:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to fetch rice sales'
-        });
-    }
-};
-
-// Get sales by customer
-const getSalesByCustomer = async (req, res) => {
-    try {
-        const { customerId } = req.params;
-        
-        const [sales] = await pool.query(`
-            SELECT 
-                rs.id, rs.quantity_kg, rs.unit_price, rs.total_price,
-                rs.paid_amount, rs.pending_amount, rs.sale_date,
-                rv.name as rice_variety_name
-            FROM rice_sales rs
-            JOIN rice_varieties rv ON rs.rice_variety_id = rv.id
-            WHERE rs.customer_id = ?
-            ORDER BY rs.sale_date DESC
-        `, [customerId]);
-
-        res.json({
-            success: true,
-            data: sales
-        });
-    } catch (error) {
-        console.error('Error fetching customer sales:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to fetch customer sales'
-        });
-    }
-};
-
-// Record payment for a sale
 const recordSalePayment = async (req, res) => {
     const connection = await pool.getConnection();
     try {
@@ -363,13 +427,20 @@ const recordSalePayment = async (req, res) => {
         const { amount, paymentMethod = 'cash', referenceNumber, notes } = req.body;
         const createdBy = req.user.id;
 
+        console.log('========== SALE PAYMENT DEBUG START ==========');
+        console.log('Recording payment for sale:', { saleId, amount, paymentMethod });
+
         // 1. Get sale details to validate
         const [saleRows] = await connection.query(
-            'SELECT * FROM rice_sales WHERE id = ?',
+            `SELECT rs.*, sc.name as customer_name 
+             FROM rice_sales rs
+             JOIN selling_customers sc ON rs.customer_id = sc.id
+             WHERE rs.id = ?`,
             [saleId]
         );
 
         if (saleRows.length === 0) {
+            await connection.rollback();
             return res.status(404).json({
                 success: false,
                 message: 'Sale not found'
@@ -380,6 +451,7 @@ const recordSalePayment = async (req, res) => {
         
         // Validate payment amount doesn't exceed pending amount
         if (amount > sale.pending_amount) {
+            await connection.rollback();
             return res.status(400).json({
                 success: false,
                 message: `Payment amount exceeds pending amount (Max: ${sale.pending_amount})`
@@ -387,7 +459,7 @@ const recordSalePayment = async (req, res) => {
         }
 
         // 2. Record payment in sales_payments table
-        await connection.query(
+        const [paymentResult] = await connection.query(
             `INSERT INTO sales_payments 
             (sale_id, customer_id, amount, payment_method, reference_number, notes, created_by)
             VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -414,6 +486,25 @@ const recordSalePayment = async (req, res) => {
 
         await connection.commit();
 
+        // 5. Create journal entry for the payment
+        try {
+            await recordPaymentReceivedAccounting({
+                paymentId: paymentResult.insertId,
+                saleId: saleId,
+                customerId: sale.customer_id,
+                customerName: sale.customer_name,
+                amount: amount,
+                paymentMethod: paymentMethod,
+                referenceNumber: referenceNumber,
+                notes: notes
+            }, createdBy);
+            console.log('Journal entry created for sale payment');
+        } catch (accountingError) {
+            console.error('Accounting entry creation failed for payment:', accountingError);
+        }
+
+        console.log('========== SALE PAYMENT DEBUG END ==========');
+
         res.status(201).json({
             success: true,
             message: 'Payment recorded successfully for the sale'
@@ -430,6 +521,7 @@ const recordSalePayment = async (req, res) => {
         connection.release();
     }
 };
+
 const recordCustomerPayment = async (req, res) => {
     const connection = await pool.getConnection();
     try {
@@ -439,7 +531,35 @@ const recordCustomerPayment = async (req, res) => {
         const { amount, paymentMethod = 'cash', notes } = req.body;
         const createdBy = req.user.id;
 
-        // 1. Get all pending sales for this customer, ordered by oldest first
+        console.log('========== CUSTOMER PAYMENT DEBUG START ==========');
+        console.log('Recording general payment for customer:', { customerId, amount, paymentMethod });
+
+        // 1. Get customer details
+        const [customerRows] = await connection.query(
+            'SELECT name, total_pending FROM selling_customers WHERE id = ?',
+            [customerId]
+        );
+
+        if (customerRows.length === 0) {
+            await connection.rollback();
+            return res.status(404).json({
+                success: false,
+                message: 'Customer not found'
+            });
+        }
+
+        const customer = customerRows[0];
+        
+        // Validate payment amount doesn't exceed total pending
+        if (amount > customer.total_pending) {
+            await connection.rollback();
+            return res.status(400).json({
+                success: false,
+                message: `Payment amount exceeds total pending amount (Max: ${customer.total_pending})`
+            });
+        }
+
+        // 2. Get all pending sales for this customer, ordered by oldest first
         const [pendingSales] = await connection.query(
             `SELECT id, pending_amount 
              FROM rice_sales 
@@ -449,6 +569,7 @@ const recordCustomerPayment = async (req, res) => {
         );
 
         if (pendingSales.length === 0) {
+            await connection.rollback();
             return res.status(400).json({
                 success: false,
                 message: 'No pending sales found for this customer'
@@ -457,15 +578,16 @@ const recordCustomerPayment = async (req, res) => {
 
         let remainingAmount = amount;
         const appliedPayments = [];
+        const paymentIds = [];
 
-        // 2. Apply payment to oldest sales first
+        // 3. Apply payment to oldest sales first
         for (const sale of pendingSales) {
             if (remainingAmount <= 0) break;
 
             const paymentAmount = Math.min(remainingAmount, sale.pending_amount);
             
             // Record payment
-            await connection.query(
+            const [paymentResult] = await connection.query(
                 `INSERT INTO sales_payments 
                 (sale_id, customer_id, amount, payment_method, notes, created_by)
                 VALUES (?, ?, ?, ?, ?, ?)`,
@@ -481,6 +603,7 @@ const recordCustomerPayment = async (req, res) => {
                 [paymentAmount, paymentAmount, sale.id]
             );
 
+            paymentIds.push(paymentResult.insertId);
             appliedPayments.push({
                 saleId: sale.id,
                 amount: paymentAmount
@@ -489,7 +612,7 @@ const recordCustomerPayment = async (req, res) => {
             remainingAmount -= paymentAmount;
         }
 
-        // 3. Update customer financials
+        // 4. Update customer financials
         await connection.query(
             `UPDATE selling_customers 
              SET total_paid = total_paid + ?,
@@ -499,6 +622,25 @@ const recordCustomerPayment = async (req, res) => {
         );
 
         await connection.commit();
+
+        // 5. Create journal entries for each payment
+        try {
+            // For simplicity, create one journal entry for the total amount
+            // You could also create separate entries for each sale if needed
+            await recordPaymentReceivedAccounting({
+                paymentId: paymentIds[0], // Use first payment ID as reference
+                customerId: customerId,
+                customerName: customer.name,
+                amount: amount,
+                paymentMethod: paymentMethod,
+                notes: notes || `General payment for customer ${customer.name}`
+            }, createdBy);
+            console.log('Journal entry created for customer payment');
+        } catch (accountingError) {
+            console.error('Accounting entry creation failed for customer payment:', accountingError);
+        }
+
+        console.log('========== CUSTOMER PAYMENT DEBUG END ==========');
 
         res.status(201).json({
             success: true,

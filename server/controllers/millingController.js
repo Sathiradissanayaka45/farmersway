@@ -17,9 +17,11 @@ const createMillingRecord = async (req, res) => {
     try {
         await connection.beginTransaction();
 
-        const { rice_variety_id, quantity_kg } = req.body;
+        const { rice_variety_id, quantity_kg, milling_date } = req.body;
         const created_by = req.user.id;
-        const milling_date = new Date();
+        
+        // Use provided milling_date or current date if not provided
+        const millingDate = milling_date ? new Date(milling_date) : new Date();
 
         // 1. Check rice stock availability
         const [riceStock] = await connection.query(
@@ -46,7 +48,7 @@ const createMillingRecord = async (req, res) => {
             `INSERT INTO milling_records 
             (rice_variety_id, quantity_kg, milling_date, created_by)
             VALUES (?, ?, ?, ?)`,
-            [rice_variety_id, quantity_kg, milling_date, created_by]
+            [rice_variety_id, quantity_kg, millingDate, created_by]
         );
 
         // 3. Update rice stock (remove the sent quantity)
@@ -81,7 +83,7 @@ const createMillingRecord = async (req, res) => {
                 id: result.insertId,
                 rice_variety_id,
                 quantity_kg,
-                milling_date
+                milling_date: millingDate
             }
         });
     } catch (error) {
@@ -283,29 +285,37 @@ const completeMillingProcess = async (req, res) => {
             [completion_date, id]
         );
 
-        // 5. Update rice stock with returned quantity (add to output variety)
-        await connection.query(
-            `UPDATE rice_varieties 
-             SET current_stock_kg = current_stock_kg + ?
-             WHERE id = ?`,
-            [returned_quantity_kg, output_rice_variety_id]
-        );
-
-        // 6. Record inventory adjustment for output variety
-        const [currentStock] = await connection.query(
+        // 5. Get current stock as number and update rice stock with returned quantity
+        const [currentStockRows] = await connection.query(
             'SELECT current_stock_kg FROM rice_varieties WHERE id = ?',
             [output_rice_variety_id]
         );
 
+        if (currentStockRows.length === 0) {
+            throw new Error('Output rice variety stock not found');
+        }
+
+        const currentStock = parseFloat(currentStockRows[0].current_stock_kg);
+        const returnedQuantity = parseFloat(returned_quantity_kg);
+        const newStock = currentStock + returnedQuantity;
+
+        await connection.query(
+            `UPDATE rice_varieties 
+             SET current_stock_kg = ?
+             WHERE id = ?`,
+            [newStock, output_rice_variety_id]
+        );
+
+        // 6. Record inventory adjustment for output variety
         await connection.query(
             `INSERT INTO inventory_adjustments 
             (rice_variety_id, adjustment_amount, previous_stock, new_stock, notes, adjusted_by)
             VALUES (?, ?, ?, ?, ?, ?)`,
             [
                 output_rice_variety_id, 
-                +returned_quantity_kg, 
-                currentStock[0].current_stock_kg, 
-                currentStock[0].current_stock_kg + returned_quantity_kg,
+                returnedQuantity, 
+                currentStock, 
+                newStock,
                 `Received ${returned_quantity_kg}kg from milling (record ID: ${id})`,
                 created_by
             ]
@@ -337,6 +347,7 @@ const completeMillingProcess = async (req, res) => {
 };
 
 // Delete milling record
+// Delete milling record
 const deleteMillingRecord = async (req, res) => {
     const connection = await pool.getConnection();
     try {
@@ -361,7 +372,24 @@ const deleteMillingRecord = async (req, res) => {
 
         const record = records[0];
 
-        // 2. Update the record as deleted
+        // 2. Get current stock as number
+        const [currentStockRows] = await connection.query(
+            'SELECT current_stock_kg FROM rice_varieties WHERE id = ?',
+            [record.rice_variety_id]
+        );
+
+        if (currentStockRows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Rice variety not found'
+            });
+        }
+
+        const currentStock = parseFloat(currentStockRows[0].current_stock_kg);
+        const quantityToRestore = parseFloat(record.quantity_kg);
+        const newStock = currentStock + quantityToRestore;
+
+        // 3. Update the record as deleted
         await connection.query(
             `UPDATE milling_records 
              SET mdeleted = TRUE,
@@ -372,29 +400,24 @@ const deleteMillingRecord = async (req, res) => {
             [deleted_by, deleted_at, id]
         );
 
-        // 3. Restore the stock
+        // 4. Restore the stock
         await connection.query(
             `UPDATE rice_varieties 
-             SET current_stock_kg = current_stock_kg + ?
+             SET current_stock_kg = ?
              WHERE id = ?`,
-            [record.quantity_kg, record.rice_variety_id]
+            [newStock, record.rice_variety_id]
         );
 
-        // 4. Record inventory adjustment
-        const [currentStock] = await connection.query(
-            'SELECT current_stock_kg FROM rice_varieties WHERE id = ?',
-            [record.rice_variety_id]
-        );
-
+        // 5. Record inventory adjustment
         await connection.query(
             `INSERT INTO inventory_adjustments 
             (rice_variety_id, adjustment_amount, previous_stock, new_stock, notes, adjusted_by)
             VALUES (?, ?, ?, ?, ?, ?)`,
             [
                 record.rice_variety_id, 
-                +record.quantity_kg, 
-                currentStock[0].current_stock_kg, 
-                currentStock[0].current_stock_kg + record.quantity_kg,
+                quantityToRestore, 
+                currentStock, 
+                newStock,
                 `Cancelled milling of ${record.quantity_kg}kg (record ID: ${id})`,
                 deleted_by
             ]

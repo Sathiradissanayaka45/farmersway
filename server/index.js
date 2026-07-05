@@ -7,7 +7,7 @@ const app = express();
 
 // Middleware
 app.use(cors({
-    origin: 'http://localhost:5173',
+    origin: ['https://farmersway.store', 'http://localhost:5173', 'https://localhost:5173'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization']
@@ -40,6 +40,8 @@ const boilingRoutes = require('./routes/boilingRoutes');
 const millingRoutes = require('./routes/millingRoutes');
 const salesRoutes = require('./routes/salesRoutes');
 const extraTransactionsRoutes = require('./routes/extraTransactionsRoutes');
+const riceTypeRoutes = require('./routes/riceTypeRoutes');
+const accountingRoutes = require('./routes/accountingRoutes');
 
 // Use routes
 app.use('/api/auth', authRoutes); // This mounts all auth routes under /api/auth
@@ -51,6 +53,8 @@ app.use('/api/boiling', boilingRoutes);
 app.use('/api/milling', millingRoutes);
 app.use('/api/sales', salesRoutes);
 app.use('/api/extra', extraTransactionsRoutes);
+app.use('/api/rice-types', riceTypeRoutes);
+app.use('/api/accounting', accountingRoutes);
 
 // Basic route
 app.get('/', (req, res) => {

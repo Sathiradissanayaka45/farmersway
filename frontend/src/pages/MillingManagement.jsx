@@ -33,6 +33,9 @@ import {
   Check as CheckIcon,
   History as HistoryIcon
 } from '@mui/icons-material';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { useSnackbar } from 'notistack';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -51,7 +54,8 @@ const MillingManagement = () => {
   const [deleteDialog, setDeleteDialog] = useState(null);
   const [formData, setFormData] = useState({
     rice_variety_id: '',
-    quantity_kg: ''
+    quantity_kg: '',
+    milling_date: new Date() // Default to current date
   });
   const [tabValue, setTabValue] = useState(0);
 
@@ -88,20 +92,34 @@ const MillingManagement = () => {
     }));
   };
 
+  const handleDateChange = (date) => {
+    setFormData(prev => ({
+      ...prev,
+      milling_date: date
+    }));
+  };
+
   const handleSubmit = async () => {
     try {
-      if (!formData.rice_variety_id || !formData.quantity_kg) {
-        enqueueSnackbar('Please select rice variety and enter quantity', { variant: 'error' });
+      if (!formData.rice_variety_id || !formData.quantity_kg || !formData.milling_date) {
+        enqueueSnackbar('Please fill all required fields', { variant: 'error' });
         return;
       }
 
+      // Format the date for API
+      const submissionData = {
+        ...formData,
+        milling_date: formData.milling_date.toISOString().split('T')[0] // YYYY-MM-DD format
+      };
+
       setLoading(true);
-      await api.post('/milling', formData);
+      await api.post('/milling', submissionData);
       enqueueSnackbar('Milling record created successfully', { variant: 'success' });
       setOpenDialog(false);
       setFormData({
         rice_variety_id: '',
-        quantity_kg: ''
+        quantity_kg: '',
+        milling_date: new Date() // Reset to current date
       });
       fetchData();
     } catch (error) {
@@ -152,10 +170,11 @@ const MillingManagement = () => {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Typography variant="h4" gutterBottom>
-        Milling Management
-      </Typography>
+    <LocalizationProvider dateAdapter={AdapterDateFns}>
+      <Box sx={{ p: 3 }}>
+        <Typography variant="h4" gutterBottom>
+          Milling Management
+        </Typography>
 
       <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between' }}>
         <Tabs value={tabValue} onChange={handleTabChange}>
@@ -179,60 +198,60 @@ const MillingManagement = () => {
           {millingRecords.length === 0 && !loading ? (
             <Alert severity="info">No pending milling records found</Alert>
           ) : (
-            <TableContainer component={Paper}>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Rice Variety</TableCell>
-                    <TableCell align="right">Quantity (kg)</TableCell>
-                    <TableCell>Milling Date</TableCell>
-                    <TableCell>Recorded By</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell align="center">Actions</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {millingRecords.map((record) => (
-                    <TableRow key={record.id}>
-                      <TableCell>
-                        {record.rice_variety_name || 'Unknown'}
-                      </TableCell>
-                      <TableCell align="right">{record.quantity_kg}</TableCell>
-                      <TableCell>
-                        {new Date(record.milling_date).toLocaleString()}
-                      </TableCell>
-                      <TableCell>{record.created_by_name}</TableCell>
-                      <TableCell>
-                        <Chip 
-                          label="Pending" 
-                          color="warning" 
-                          size="small" 
-                        />
-                      </TableCell>
-                      <TableCell align="center">
-                        <Tooltip title="Complete Process">
-                          <IconButton 
-                            onClick={() => setCompleteDialog(record)}
-                            color="primary"
-                            sx={{ mr: 1 }}
-                          >
-                            <CheckIcon />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Delete Record">
-                          <IconButton 
-                            onClick={() => setDeleteDialog(record)}
-                            color="error"
-                          >
-                            <DeleteIcon />
-                          </IconButton>
-                        </Tooltip>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
+<TableContainer component={Paper}>
+  <Table>
+    <TableHead>
+      <TableRow>
+        <TableCell>Rice Variety</TableCell>
+        <TableCell align="right">Quantity (kg)</TableCell>
+        <TableCell>Milling Date</TableCell>
+        <TableCell>Recorded By</TableCell>
+        <TableCell>Status</TableCell>
+        <TableCell align="center">Actions</TableCell>
+      </TableRow>
+    </TableHead>
+    <TableBody>
+      {millingRecords.map((record) => (
+        <TableRow key={record.id}>
+          <TableCell>
+            {record.rice_variety_name || 'Unknown'}
+          </TableCell>
+          <TableCell align="right">{record.quantity_kg}</TableCell>
+          <TableCell>
+            {new Date(record.milling_date).toLocaleDateString()} {/* Changed this line */}
+          </TableCell>
+          <TableCell>{record.created_by_name}</TableCell>
+          <TableCell>
+            <Chip 
+              label="Pending" 
+              color="warning" 
+              size="small" 
+            />
+          </TableCell>
+          <TableCell align="center">
+            <Tooltip title="Complete Process">
+              <IconButton 
+                onClick={() => setCompleteDialog(record)}
+                color="primary"
+                sx={{ mr: 1 }}
+              >
+                <CheckIcon />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Delete Record">
+              <IconButton 
+                onClick={() => setDeleteDialog(record)}
+                color="error"
+              >
+                <DeleteIcon />
+              </IconButton>
+            </Tooltip>
+          </TableCell>
+        </TableRow>
+      ))}
+    </TableBody>
+  </Table>
+</TableContainer>
           )}
         </>
       )}
@@ -242,93 +261,101 @@ const MillingManagement = () => {
           {completedRecords.length === 0 && !loading ? (
             <Alert severity="info">No completed milling records found</Alert>
           ) : (
-            <TableContainer component={Paper}>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Input Rice</TableCell>
-                    <TableCell align="right">Sent (kg)</TableCell>
-                    <TableCell>Output Rice</TableCell>
-                    <TableCell align="right">Returned (kg)</TableCell>
-                    <TableCell>Completion Date</TableCell>
-                    <TableCell>Completed By</TableCell>
-                    <TableCell align="center">Actions</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {completedRecords.map((record) => (
-                    <TableRow key={record.milling_id}>
-                      <TableCell>{record.input_rice_variety_name}</TableCell>
-                      <TableCell align="right">{record.sent_quantity}</TableCell>
-                      <TableCell>{record.output_rice_variety_name}</TableCell>
-                      <TableCell align="right">{record.returned_quantity_kg}</TableCell>
-                      <TableCell>
-                        {new Date(record.completion_date).toLocaleString()}
-                      </TableCell>
-                      <TableCell>{record.completed_by}</TableCell>
-                      <TableCell align="center">
-                        <Tooltip title="View Details">
-                          <IconButton 
-                            onClick={() => navigate(`/dashboard/milling/${record.milling_id}`)}
-                            color="primary"
-                          >
-                            <HistoryIcon />
-                          </IconButton>
-                        </Tooltip>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
+<TableContainer component={Paper}>
+  <Table>
+    <TableHead>
+      <TableRow>
+        <TableCell>Input Rice</TableCell>
+        <TableCell align="right">Sent (kg)</TableCell>
+        <TableCell>Output Rice</TableCell>
+        <TableCell align="right">Returned (kg)</TableCell>
+        <TableCell>Completion Date</TableCell>
+        <TableCell>Completed By</TableCell>
+        <TableCell align="center">Actions</TableCell>
+      </TableRow>
+    </TableHead>
+    <TableBody>
+      {completedRecords.map((record) => (
+        <TableRow key={record.milling_id}>
+          <TableCell>{record.input_rice_variety_name}</TableCell>
+          <TableCell align="right">{record.sent_quantity}</TableCell>
+          <TableCell>{record.output_rice_variety_name}</TableCell>
+          <TableCell align="right">{record.returned_quantity_kg}</TableCell>
+          <TableCell>
+            {new Date(record.completion_date).toLocaleDateString()} {/* Changed this line */}
+          </TableCell>
+          <TableCell>{record.completed_by}</TableCell>
+          <TableCell align="center">
+            <Tooltip title="View Details">
+              <IconButton 
+                onClick={() => navigate(`/dashboard/milling/${record.milling_id}`)}
+                color="primary"
+              >
+                <HistoryIcon />
+              </IconButton>
+            </Tooltip>
+          </TableCell>
+        </TableRow>
+      ))}
+    </TableBody>
+  </Table>
+</TableContainer>
           )}
         </>
       )}
 
       {/* Create Milling Dialog */}
-      <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Create New Milling Record</DialogTitle>
-        <DialogContent>
-          <Box sx={{ mt: 2 }}>
-            <FormControl fullWidth sx={{ mb: 2 }}>
-              <InputLabel>Rice Variety</InputLabel>
-              <Select
-                name="rice_variety_id"
-                value={formData.rice_variety_id}
-                onChange={handleInputChange}
-                label="Rice Variety"
-                required
-              >
-                {riceVarieties.map(rice => (
-                  <MenuItem key={rice.id} value={rice.id}>{rice.name}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+        <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="sm" fullWidth>
+          <DialogTitle>Create New Milling Record</DialogTitle>
+          <DialogContent>
+            <Box sx={{ mt: 2 }}>
+              <FormControl fullWidth sx={{ mb: 2 }}>
+                <InputLabel>Rice Variety</InputLabel>
+                <Select
+                  name="rice_variety_id"
+                  value={formData.rice_variety_id}
+                  onChange={handleInputChange}
+                  label="Rice Variety"
+                  required
+                >
+                  {riceVarieties.map(rice => (
+                    <MenuItem key={rice.id} value={rice.id}>{rice.name}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
 
-            <TextField
-              fullWidth
-              sx={{ mb: 2 }}
-              name="quantity_kg"
-              label="Quantity (kg)"
-              type="number"
-              value={formData.quantity_kg}
-              onChange={handleInputChange}
-              required
-              inputProps={{ min: 0.1, step: 0.1 }}
-            />
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenDialog(false)}>Cancel</Button>
-          <Button 
-            onClick={handleSubmit}
-            variant="contained"
-            disabled={loading}
-          >
-            Create Record
-          </Button>
-        </DialogActions>
-      </Dialog>
+              <TextField
+                fullWidth
+                sx={{ mb: 2 }}
+                name="quantity_kg"
+                label="Quantity (kg)"
+                type="number"
+                value={formData.quantity_kg}
+                onChange={handleInputChange}
+                required
+                inputProps={{ min: 0.1, step: 0.1 }}
+              />
+
+              <DatePicker
+                label="Milling Date"
+                value={formData.milling_date}
+                onChange={handleDateChange}
+                renderInput={(params) => <TextField {...params} fullWidth sx={{ mb: 2 }} required />}
+                maxDate={new Date()} // Prevent future dates
+              />
+            </Box>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setOpenDialog(false)}>Cancel</Button>
+            <Button 
+              onClick={handleSubmit}
+              variant="contained"
+              disabled={loading}
+            >
+              Create Record
+            </Button>
+          </DialogActions>
+        </Dialog>
 
       {/* Complete Milling Dialog */}
       {completeDialog && (
@@ -348,24 +375,24 @@ const MillingManagement = () => {
         onClose={() => setDeleteDialog(null)}
       >
         <DialogTitle>Confirm Delete</DialogTitle>
-        <DialogContent>
-          <Typography>
-            Are you sure you want to delete this milling record?
-          </Typography>
-          {deleteDialog && (
-            <Box sx={{ mt: 2 }}>
-              <Typography variant="body2">
-                <strong>Rice Variety:</strong> {deleteDialog.rice_variety_name}
-              </Typography>
-              <Typography variant="body2">
-                <strong>Quantity:</strong> {deleteDialog.quantity_kg} kg
-              </Typography>
-              <Typography variant="body2">
-                <strong>Date:</strong> {new Date(deleteDialog.milling_date).toLocaleString()}
-              </Typography>
-            </Box>
-          )}
-        </DialogContent>
+<DialogContent>
+  <Typography>
+    Are you sure you want to delete this milling record?
+  </Typography>
+  {deleteDialog && (
+    <Box sx={{ mt: 2 }}>
+      <Typography variant="body2">
+        <strong>Rice Variety:</strong> {deleteDialog.rice_variety_name}
+      </Typography>
+      <Typography variant="body2">
+        <strong>Quantity:</strong> {deleteDialog.quantity_kg} kg
+      </Typography>
+      <Typography variant="body2">
+        <strong>Date:</strong> {new Date(deleteDialog.milling_date).toLocaleDateString()} {/* Changed this line */}
+      </Typography>
+    </Box>
+  )}
+</DialogContent>
         <DialogActions>
           <Button onClick={() => setDeleteDialog(null)}>Cancel</Button>
           <Button 
@@ -378,7 +405,8 @@ const MillingManagement = () => {
           </Button>
         </DialogActions>
       </Dialog>
-    </Box>
+      </Box>
+    </LocalizationProvider>
   );
 };
 

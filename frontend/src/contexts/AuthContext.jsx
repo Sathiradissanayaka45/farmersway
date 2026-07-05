@@ -5,13 +5,15 @@ const AuthContext = createContext(null);
 
 // Create axios instance with default config
 const api = axios.create({
-    baseURL: 'http://31.97.236.217:5000/',
+    baseURL: 'http://localhost:5000/api',
     withCredentials: true,
     headers: {
         'Content-Type': 'application/json'
     }
 });
 
+
+    // baseURL: 'http://31.97.236.217:5000/api',
 // In your AuthContext
 api.interceptors.request.use((config) => {
     const token = localStorage.getItem('token');

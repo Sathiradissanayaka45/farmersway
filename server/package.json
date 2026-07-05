@@ -5,7 +5,14 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "db-manager": "node scripts/database-manager.js",
+    "db-health": "node scripts/database-manager.js health",
+    "db-tables": "node scripts/database-manager.js tables",
+    "db-backup": "node scripts/database-manager.js backup",
+    "db-update": "node scripts/database-manager.js update-schema",
+    "db-report": "node scripts/database-manager.js full-report",
+    "update-rice-sales": "node scripts/update-rice-sales.js"
   },
   "keywords": [],
   "author": "",
@@ -18,6 +25,7 @@
     "dotenv": "^17.2.1",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
+    "moment": "^2.30.1",
     "mysql2": "^3.14.3"
   },
   "devDependencies": {
