@@ -549,7 +549,7 @@ const Dashboard = () => {
                         <TableRow>
                           <TableCell>Date</TableCell>
                           <TableCell>Customer</TableCell>
-                          <TableCell align="right">Amount (₹)</TableCell>
+                          <TableCell align="right">Amount (LKR)</TableCell>
                           <TableCell align="center">Status</TableCell>
                         </TableRow>
                       </TableHead>
@@ -599,7 +599,7 @@ const Dashboard = () => {
                         <TableRow>
                           <TableCell>Date</TableCell>
                           <TableCell>Supplier</TableCell>
-                          <TableCell align="right">Amount (₹)</TableCell>
+                          <TableCell align="right">Amount (LKR)</TableCell>
                           <TableCell align="center">Status</TableCell>
                         </TableRow>
                       </TableHead>
@@ -655,25 +655,25 @@ const Dashboard = () => {
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Typography variant="body2">Total Sales:</Typography>
                 <Typography variant="body2" fontWeight="bold">
-                  ₹{parseFloat(dashboardData?.financial?.total_sales || 0).toLocaleString('en-IN')}
+                  LKR {parseFloat(dashboardData?.financial?.total_sales || 0).toLocaleString('en-IN')}
                 </Typography>
               </Box>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Typography variant="body2">Total Purchases:</Typography>
                 <Typography variant="body2" fontWeight="bold">
-                  ₹{parseFloat(dashboardData?.financial?.total_purchases || 0).toLocaleString('en-IN')}
+                  LKR {parseFloat(dashboardData?.financial?.total_purchases || 0).toLocaleString('en-IN')}
                 </Typography>
               </Box>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Typography variant="body2">Extra Income:</Typography>
                 <Typography variant="body2" fontWeight="bold">
-                  ₹{parseFloat(dashboardData?.financial?.extra_income || 0).toLocaleString('en-IN')}
+                  LKR {parseFloat(dashboardData?.financial?.extra_income || 0).toLocaleString('en-IN')}
                 </Typography>
               </Box>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Typography variant="body2">Extra Expenses:</Typography>
                 <Typography variant="body2" fontWeight="bold">
-                  ₹{parseFloat(dashboardData?.financial?.extra_expenses || 0).toLocaleString('en-IN')}
+                  LKR {parseFloat(dashboardData?.financial?.extra_expenses || 0).toLocaleString('en-IN')}
                 </Typography>
               </Box>
               <Box sx={{ 
@@ -690,7 +690,7 @@ const Dashboard = () => {
                   fontWeight="bold"
                   color={dashboardData?.financial?.net_profit >= 0 ? 'success.main' : 'error.main'}
                 >
-                  ₹{parseFloat(dashboardData?.financial?.net_profit || 0).toLocaleString('en-IN')}
+                  LKR {parseFloat(dashboardData?.financial?.net_profit || 0).toLocaleString('en-IN')}
                 </Typography>
               </Box>
             </Box>

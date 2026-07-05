@@ -53,16 +53,16 @@ const AccountDetailsPage = () => {
     }
   };
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-IN', {
+const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('en-LK', {
       style: 'currency',
-      currency: 'INR',
+      currency: 'LKR',
       minimumFractionDigits: 2
     }).format(amount);
   };
 
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-IN', {
+    return new Date(dateString).toLocaleDateString('en-LK', {
       year: 'numeric',
       month: 'short',
       day: 'numeric'

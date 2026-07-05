@@ -346,7 +346,7 @@ const ExtraIncomePage = () => {
                   Total Income
                 </Typography>
                 <Typography variant="h5" color="success.main">
-                  ₹{totalAmount.toFixed(2)}
+                  LKR {totalAmount.toFixed(2)}
                 </Typography>
                 <Typography variant="body2">
                   {incomeRecords.length} records
@@ -361,7 +361,7 @@ const ExtraIncomePage = () => {
                   Cash Payments
                 </Typography>
                 <Typography variant="h5">
-                  ₹{cashAmount.toFixed(2)}
+                  LKR {cashAmount.toFixed(2)}
                 </Typography>
               </CardContent>
             </Card>
@@ -373,7 +373,7 @@ const ExtraIncomePage = () => {
                   Bank Transfers
                 </Typography>
                 <Typography variant="h5" color="primary.main">
-                  ₹{bankAmount.toFixed(2)}
+                  LKR {bankAmount.toFixed(2)}
                 </Typography>
               </CardContent>
             </Card>
@@ -385,7 +385,7 @@ const ExtraIncomePage = () => {
                   Mobile Payments
                 </Typography>
                 <Typography variant="h5" color="secondary.main">
-                  ₹{mobileAmount.toFixed(2)}
+                  LKR {mobileAmount.toFixed(2)}
                 </Typography>
               </CardContent>
             </Card>
@@ -471,16 +471,16 @@ const ExtraIncomePage = () => {
                             {record.quantity ? `${parseFloat(record.quantity).toFixed(2)}` : '-'}
                           </TableCell>
                           <TableCell align="right">
-                            {record.unit_price ? `₹${parseFloat(record.unit_price).toFixed(2)}` : '-'}
+                            {record.unit_price ? `LKR ${parseFloat(record.unit_price).toFixed(2)}` : '-'}
                           </TableCell>
                           <TableCell align="right">
                             <Box>
                               <Typography variant="body2" fontWeight="bold">
-                                ₹{parseFloat(record.amount).toFixed(2)}
+                                LKR {parseFloat(record.amount).toFixed(2)}
                               </Typography>
                               {calculatedAmount && calculatedAmount !== parseFloat(record.amount).toFixed(2) && (
                                 <Typography variant="caption" color="textSecondary">
-                                  (Calc: ₹{calculatedAmount})
+                                  (Calc: LKR {calculatedAmount})
                                 </Typography>
                               )}
                             </Box>
@@ -680,7 +680,7 @@ const ExtraIncomePage = () => {
                   <TextField
                     fullWidth
                     name="unit_price"
-                    label="Unit Price (₹)"
+                    label="Unit Price (LKR)"
                     type="number"
                     value={formData.unit_price}
                     onChange={handleInputChange}
@@ -692,7 +692,7 @@ const ExtraIncomePage = () => {
                   <TextField
                     fullWidth
                     name="amount"
-                    label="Total Amount (₹) *"
+                    label="Total Amount (LKR) *"
                     type="number"
                     value={formData.amount}
                     onChange={handleInputChange}
@@ -706,7 +706,7 @@ const ExtraIncomePage = () => {
               {(formData.quantity && formData.unit_price) && (
                 <Alert severity="info" sx={{ mb: 2 }}>
                   <Typography variant="body2">
-                    Calculated Amount: ₹{calculateAmount().toFixed(2)}
+                    Calculated Amount: LKR {calculateAmount().toFixed(2)}
                   </Typography>
                   {parseFloat(formData.amount) !== calculateAmount() && (
                     <Typography variant="body2" color="warning.main" sx={{ mt: 0.5 }}>

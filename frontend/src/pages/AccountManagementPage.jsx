@@ -183,10 +183,10 @@ const AccountManagementPage = () => {
     navigate(`/dashboard/account-details/${accountId}`);
   };
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-IN', {
+const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('en-LK', {
       style: 'currency',
-      currency: 'INR',
+      currency: 'LKR',
       minimumFractionDigits: 2
     }).format(amount);
   };

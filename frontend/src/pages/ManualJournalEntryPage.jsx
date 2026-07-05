@@ -314,7 +314,7 @@ const ManualJournalEntryPage = () => {
                   Debit Total
                 </Typography>
                 <Typography variant="h6" color="success.main">
-                  ₹{totals.debit.toFixed(2)}
+                  LKR {totals.debit.toFixed(2)}
                 </Typography>
               </Box>
               <Box>
@@ -322,7 +322,7 @@ const ManualJournalEntryPage = () => {
                   Credit Total
                 </Typography>
                 <Typography variant="h6" color="error.main">
-                  ₹{totals.credit.toFixed(2)}
+                  LKR {totals.credit.toFixed(2)}
                 </Typography>
               </Box>
               <Box>
@@ -333,7 +333,7 @@ const ManualJournalEntryPage = () => {
                 />
                 {!isBalanced && (
                   <Typography variant="caption" color="error" sx={{ display: 'block', mt: 0.5 }}>
-                    Difference: ₹{Math.abs(totals.debit - totals.credit).toFixed(2)}
+                    Difference: LKR {Math.abs(totals.debit - totals.credit).toFixed(2)}
                   </Typography>
                 )}
               </Box>

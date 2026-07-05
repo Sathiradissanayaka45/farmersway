@@ -365,7 +365,7 @@ const EditJournalEntryPage = () => {
                   Debit Total
                 </Typography>
                 <Typography variant="h6" color="success.main">
-                  ₹{totals.debit.toFixed(2)}
+                  LKR {totals.debit.toFixed(2)}
                 </Typography>
               </Box>
               <Box>
@@ -373,7 +373,7 @@ const EditJournalEntryPage = () => {
                   Credit Total
                 </Typography>
                 <Typography variant="h6" color="error.main">
-                  ₹{totals.credit.toFixed(2)}
+                  LKR {totals.credit.toFixed(2)}
                 </Typography>
               </Box>
               <Box>

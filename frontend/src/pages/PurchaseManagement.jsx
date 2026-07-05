@@ -561,13 +561,13 @@ const PurchaseManagement = () => {
                                         </Box>
                                         <Box sx={{ textAlign: 'right' }}>
                                             <Typography variant="body2">
-                                                Total Purchases: ₹{parseFloat(customer.total_purchases).toFixed(2)}
+                                                Total Purchases: LKR {parseFloat(customer.total_purchases).toFixed(2)}
                                             </Typography>
                                             <Typography variant="body2">
-                                                Total Paid: ₹{parseFloat(customer.total_paid).toFixed(2)}
+                                                Total Paid: LKR {parseFloat(customer.total_paid).toFixed(2)}
                                             </Typography>
                                             <Typography variant="body2" color="error">
-                                                Pending: ₹{parseFloat(customer.total_pending).toFixed(2)}
+                                                Pending: LKR {parseFloat(customer.total_pending).toFixed(2)}
                                             </Typography>
                                         </Box>
                                     </Box>
@@ -613,7 +613,7 @@ const PurchaseManagement = () => {
                                                                         {parseFloat(purchase.total_quantity_kg).toFixed(2)} kg
                                                                     </TableCell>
                                                                     <TableCell align="right">
-                                                                        ₹{parseFloat(purchase.total_amount).toFixed(2)}
+                                                                        LKR {parseFloat(purchase.total_amount).toFixed(2)}
                                                                     </TableCell>
                                                                     <TableCell>
                                                                         {purchase.last_purchase_date ? 
@@ -816,7 +816,7 @@ const PurchaseManagement = () => {
 
                         {purchaseForm.quantityKg && purchaseForm.unitPrice && (
                             <Alert severity="info" sx={{ mt: 2, mb: 2 }}>
-                                Total Amount: ₹{(parseFloat(purchaseForm.quantityKg) * parseFloat(purchaseForm.unitPrice)).toFixed(2)}
+                                Total Amount: LKR {(parseFloat(purchaseForm.quantityKg) * parseFloat(purchaseForm.unitPrice)).toFixed(2)}
                             </Alert>
                         )}
 
@@ -857,7 +857,7 @@ const PurchaseManagement = () => {
                                 severity={purchaseForm.pendingAmount > 0 ? "warning" : "success"} 
                                 sx={{ mt: 2, mb: 2 }}
                             >
-                                Pending Amount: ₹{(
+                                Pending Amount: LKR {(
                                     parseFloat(purchaseForm.quantityKg) * parseFloat(purchaseForm.unitPrice) - 
                                     (parseFloat(purchaseForm.paidAmount) || 0)
                                 ).toFixed(2)}
@@ -915,7 +915,7 @@ const PurchaseManagement = () => {
                                             <strong>Customer:</strong> {selectedPaymentTarget.name}
                                         </Typography>
                                         <Typography variant="body2">
-                                            <strong>Total Pending:</strong> ₹{parseFloat(selectedPaymentTarget.total_pending).toFixed(2)}
+                                            <strong>Total Pending:</strong> LKR {parseFloat(selectedPaymentTarget.total_pending).toFixed(2)}
                                         </Typography>
                                     </>
                                 ) : (
@@ -927,7 +927,7 @@ const PurchaseManagement = () => {
                                             <strong>Customer:</strong> {selectedPaymentTarget.customer_name}
                                         </Typography>
                                         <Typography variant="body2">
-                                            <strong>Order Pending:</strong> ₹{parseFloat(selectedPaymentTarget.pending_amount).toFixed(2)}
+                                            <strong>Order Pending:</strong> LKR {parseFloat(selectedPaymentTarget.pending_amount).toFixed(2)}
                                         </Typography>
                                     </>
                                 )}
@@ -951,7 +951,7 @@ const PurchaseManagement = () => {
                                     selectedPaymentTarget?.pending_amount
                             }}
                             InputProps={{
-                                startAdornment: <InputAdornment position="start">₹</InputAdornment>,
+                                startAdornment: <InputAdornment position="start">LKR</InputAdornment>,
                             }}
                         />
 

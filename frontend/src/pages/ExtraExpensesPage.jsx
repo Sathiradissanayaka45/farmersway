@@ -362,7 +362,7 @@ const ExtraExpensesPage = () => {
                         </TableCell>
                         <TableCell align="right">
                           <Typography variant="body2" fontWeight="bold" color="error.main">
-                            ₹{Number(record.amount).toFixed(2)}
+                            LKR {Number(record.amount).toFixed(2)}
                           </Typography>
                         </TableCell>
                         <TableCell>
@@ -547,7 +547,7 @@ const ExtraExpensesPage = () => {
                   <TextField
                     fullWidth
                     name="amount"
-                    label="Amount (₹) *"
+                    label="Amount (LKR) *"
                     type="number"
                     value={formData.amount}
                     onChange={handleInputChange}

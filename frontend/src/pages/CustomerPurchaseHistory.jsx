@@ -221,7 +221,7 @@ const CustomerPurchaseHistory = () => {
                                 Total Purchases
                             </Typography>
                             <Typography variant="h4">
-                                ₹{totals.totalPurchases.toFixed(2)}
+                                LKR {totals.totalPurchases.toFixed(2)}
                             </Typography>
                             <Typography variant="body2" color="textSecondary">
                                 {purchases.length} transactions
@@ -237,7 +237,7 @@ const CustomerPurchaseHistory = () => {
                                 Total Paid
                             </Typography>
                             <Typography variant="h4" color="success.main">
-                                ₹{totals.totalPaid.toFixed(2)}
+                                LKR {totals.totalPaid.toFixed(2)}
                             </Typography>
                         </CardContent>
                     </Card>
@@ -250,7 +250,7 @@ const CustomerPurchaseHistory = () => {
                                 Total Pending
                             </Typography>
                             <Typography variant="h4" color={totals.totalPending > 0 ? "error.main" : "success.main"}>
-                                ₹{totals.totalPending.toFixed(2)}
+                                LKR {totals.totalPending.toFixed(2)}
                             </Typography>
                             {totals.totalPending > 0 && (
                                 <Typography variant="caption" color="error">
@@ -316,7 +316,7 @@ const CustomerPurchaseHistory = () => {
                                             {parseFloat(stat.total_quantity_kg).toFixed(2)} kg
                                         </TableCell>
                                         <TableCell align="right">
-                                            ₹{parseFloat(stat.total_amount).toFixed(2)}
+                                            LKR {parseFloat(stat.total_amount).toFixed(2)}
                                         </TableCell>
                                         <TableCell align="right">
                                             {stat.total_purchases}
@@ -391,17 +391,17 @@ const CustomerPurchaseHistory = () => {
                                             {parseFloat(purchase.quantity_kg).toFixed(2)}
                                         </TableCell>
                                         <TableCell align="right">
-                                            ₹{parseFloat(purchase.unit_price).toFixed(2)}
+                                            LKR {parseFloat(purchase.unit_price).toFixed(2)}
                                         </TableCell>
                                         <TableCell align="right">
-                                            ₹{parseFloat(purchase.total_price).toFixed(2)}
+                                            LKR {parseFloat(purchase.total_price).toFixed(2)}
                                         </TableCell>
                                         <TableCell align="right">
-                                            ₹{parseFloat(purchase.paid_amount).toFixed(2)}
+                                            LKR {parseFloat(purchase.paid_amount).toFixed(2)}
                                         </TableCell>
                                         <TableCell align="right">
                                             <Chip 
-                                                label={`₹${parseFloat(purchase.pending_amount).toFixed(2)}`}
+                                                label={`LKR ${parseFloat(purchase.pending_amount).toFixed(2)}`}
                                                 size="small"
                                                 color={purchase.pending_amount > 0 ? "error" : "success"}
                                                 variant="outlined"
@@ -443,9 +443,9 @@ const CustomerPurchaseHistory = () => {
                                     Purchase #{selectedPurchase.id} - {selectedPurchase.rice_variety_name}
                                 </Typography>
                                 <Typography variant="body2">
-                                    Amount: ₹{parseFloat(selectedPurchase.total_price).toFixed(2)} | 
-                                    Paid: ₹{parseFloat(selectedPurchase.paid_amount).toFixed(2)} | 
-                                    Pending: ₹{parseFloat(selectedPurchase.pending_amount).toFixed(2)}
+                                    Amount: LKR {parseFloat(selectedPurchase.total_price).toFixed(2)} | 
+                                    Paid: LKR {parseFloat(selectedPurchase.paid_amount).toFixed(2)} | 
+                                    Pending: LKR {parseFloat(selectedPurchase.pending_amount).toFixed(2)}
                                 </Typography>
                             </Box>
                         )}
@@ -460,8 +460,8 @@ const CustomerPurchaseHistory = () => {
                             inputProps={{ step: "0.01", min: "0" }}
                             helperText={
                                 selectedPurchase ? 
-                                `Max: ₹${parseFloat(selectedPurchase.pending_amount).toFixed(2)}` :
-                                `Max: ₹${parseFloat(customer?.total_pending || 0).toFixed(2)}`
+                                `Max: LKR ${parseFloat(selectedPurchase.pending_amount).toFixed(2)}` :
+                                `Max: LKR ${parseFloat(customer?.total_pending || 0).toFixed(2)}`
                             }
                         />
 
